@@ -11,7 +11,7 @@ from distributions import norm_log_prob,torch_norm_log_prob
 from scipy.special import logsumexp
 from utils import torch_logsumexp,torch_transpose,torch_tile
 
-def norm_naive_bayes_predict(X,mu,sd,logPC):
+def numpy_norm_naive_bayes_predict(X,mu,sd,logPC):
     # X: sample_size * features
     # mu: class_size * features
     # sd: class_size * featrues
@@ -36,3 +36,5 @@ def torch_norm_naive_bayes_predict(X,mu,sd,logPC):
     cp = torch_norm_log_prob(_X, mu, sd).sum(dim=2) + logPC  
     log_predict_prob = torch_transpose((torch_transpose(cp) - torch_logsumexp(cp,dim=1)))
     return log_predict_prob
+
+norm_naive_bayes_predict = torch_norm_naive_bayes_predict

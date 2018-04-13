@@ -26,7 +26,7 @@ def target():
 optimizing(target)
 print('optimizing: mu={}'.format(mu.data.numpy()))
 res = vb(target)
-print('optimizing: mu={} omega={} sigma={}'.format(res[0],res[1],np.exp(res[1])))
+print('vb: mu={} omega={} sigma={}'.format(res[0],res[1],np.exp(res[1])))
 
 # stan model
 

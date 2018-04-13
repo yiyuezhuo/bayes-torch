@@ -55,16 +55,22 @@ class Model:
         start = 0
         for param in self.parameters:
             param_size = np.prod(param.size())
-            grad[start:start+param_size] = param.grad.data.numpy()
+            grad[start:start+param_size] = param.grad.data.numpy().copy().ravel()
             start += param_size
         return grad
-
-    def grad_q_meanfield(self, mu, omega, target_f, q_size=10, lr = 0.01):
+    def collect_parameter(self):
+        res = np.empty(self.n_parameters)
+        start = 0
+        for param in self.parameters:
+            param_size = np.prod(param.size())
+            res[start:start+param_size] = param.data.numpy().copy().ravel()
+            start += param_size
+        return res
+    def grad_q_meanfield(self, target_f, mu, omega, q_size=10, lr = 0.01):
         n_parameters = self.n_parameters
         
         mu_grad = np.zeros(n_parameters)
         omega_grad = np.zeros(n_parameters)
-        
         
         optimizer = torch.optim.SGD(self.parameters, lr=lr)
         # optimizer只用于清空梯度，不用它来更新
@@ -88,15 +94,21 @@ class Model:
         
         return mu_grad,omega_grad
             
-    def vb_meanfield(self, target_f, n_epoch = 100, lr=0.01, q_size = 10):
+    def vb_meanfield(self, target_f, mu=None,omega=None, zero_init=False, n_epoch = 100, lr=0.01, q_size = 10):
         n_parameters = self.n_parameters
-        mu = np.zeros(n_parameters)
-        omega = np.zeros(n_parameters)
+        
+        if mu is None:
+            if zero_init:
+                mu = np.zeros(n_parameters)
+            else:
+                mu = np.array(self.collect_parameter())
+        if omega is None:
+            omega = np.zeros(n_parameters) # sigma=exp(omega) = 1
         
         #optimizer = torch.optim.SGD(self.parameters, lr=lr)
         
         for i in range(n_epoch):
-            mu_grad,omega_grad = self.grad_q_meanfield(mu, omega, target_f, q_size = q_size)
+            mu_grad,omega_grad = self.grad_q_meanfield(target_f, mu, omega, q_size = q_size)
             mu += lr * mu_grad
             omega += lr * omega_grad
         
@@ -116,8 +128,8 @@ class Model:
         raise NotImplementedError
     def optimizing(self, target_f, lr=0.01, n_epoch = 1000):
         '''
-        optimizing的结果作为状态仍然存在原动态图参数里\
-        target_f当然不应该是带变量的，因为这个类就是为了消除这些操作的
+        After optimizing run, the result is stored in original torch variable.
+        target_f don't have any parameter, since the class serve to delete the trouble
         '''
         optimizer = torch.optim.SGD(self.parameters, lr=lr)
         
@@ -127,13 +139,19 @@ class Model:
             loss = -target
             loss.backward()
             optimizer.step()
-        
+    def grad(self, target_f):
+        fake_lr = 1.0
+        optimizer = torch.optim.SGD(self.parameters, lr=fake_lr)
+        optimizer.zero_grad()
+        target = target_f()
+        target.backward()
+        return self.collect_parameter_grad()
             
 def easy_variable(data, is_float=True, requires_grad=False):
     if not hasattr(data, '__len__'):# is scaler without
         data = [data]
     if not isinstance(data, torch.Tensor):
-        array = torch.from_numpy(np.array(data))
+        array = torch.from_numpy(np.array(data)) # np.array copyed data
         if is_float:
             array = array.float()
     return Variable(array, requires_grad=requires_grad)

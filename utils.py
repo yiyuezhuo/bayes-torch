@@ -35,10 +35,10 @@ def sigmoid(x):
     # torch have this function in Variable
     return 1/(1+np.exp(-x))
 
-def soft_cut_ge(x,threshold,tense=1.0):
+def numpy_soft_cut_ge(x,threshold,tense=1.0):
     return sigmoid(tense*(x-threshold))
 
-def soft_cut_le(x,threshold,tense=1.0):
+def numpy_soft_cut_le(x,threshold,tense=1.0):
     return sigmoid(tense*(-x+threshold))
 
 def torch_logsumexp(X,dim=0):
@@ -56,14 +56,19 @@ def torch_soft_cut_ge(x,threshold,tense=1.0):
 def torch_soft_cut_le(x,threshold,tense=1.0):
     return torch.sigmoid(tense*(-x+threshold))
 
+soft_cut_le = torch_soft_cut_le
+soft_cut_ge = torch_soft_cut_ge
+logsumexp = torch_logsumexp
+
 def torch_transpose(x):
     # torch don't have "default"(2d matrix) transpose
     return x.transpose(0,1)
 
 
-def torch_dis(A,B):
+def torch_cdis(A,B):
     # scipy.spatial.distance.cdist(A, B).min(axis=1) # numpy version
     d = A.repeat(1,B.size()[0]).resize(A.size()[0]*B.size()[0],2).resize(A.size()[0],B.size()[0],2) - B
     return torch.sqrt((d**2).sum(dim=2)) 
 
 
+cdist = torch_cdis

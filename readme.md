@@ -38,7 +38,7 @@ def target():
     return target
 ```
 
-Full script:
+Full code comparing two framework:
 
 ```
 from core import Parameter,Data,optimizing,vb,sampling
@@ -87,3 +87,44 @@ res3a=np.array(res3['sampler_params'])
 print('vb(stan): mu={} sigma={}'.format(res3a[:,0].mean(),res3a[:,0].std()))
 
 ```
+
+Enemy location detecting example:
+```
+# model
+friend = Data(friend_point)
+battle = Data(battle_point)
+enemy = Parameter(enemy_point) # set real value as init value, though maybe a randomed init is more proper
+
+conflict_threshold = 0.2
+distance_threshold = 1.0
+tense = 10.0
+
+def target():
+    friend_enemy = torch.cat((friend, enemy),0)
+    distance = cdist(battle, friend_enemy).min(dim=1)[0]
+    logPC = Data(_logPC)
+
+    mu = Variable(torch.zeros(2,2)) 
+    sd = Variable(torch.zeros(2,2))
+    
+    mu[0,:] = friend.mean(dim=0)
+    mu[1,:] = enemy.mean(dim=0)
+    sd[0,:] = friend.std(dim=0)
+    sd[1,:] = enemy.std(dim=0)
+    
+    conflict = torch.exp(norm_naive_bayes_predict(battle, mu, sd, logPC)).prod(dim=1)
+    p = soft_cut_ge(conflict,conflict_threshold, tense = tense) * soft_cut_le(distance, distance_threshold, tense = tense)
+    
+    target= torch.sum(torch.log(p))
+    return target
+
+def target2():
+    target1 = target()
+    # location prior
+    target2 = target1 + 5.0*torch.sum(soft_cut_ge(enemy.sum(dim=1),5.0,tense=5))
+    #target2 = target1 + torch.sum(enemy.sum(dim=1))
+    return target2
+
+```
+
+<img src="images/example.png">
