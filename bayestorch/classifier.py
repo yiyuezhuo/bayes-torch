@@ -7,9 +7,9 @@ Created on Thu Apr 12 08:44:50 2018
 
 import numpy as np
 import torch
-from distributions import norm_log_prob,torch_norm_log_prob
+from .distributions import norm_log_prob,torch_norm_log_prob
 from scipy.special import logsumexp
-from utils import torch_logsumexp,torch_transpose,torch_tile
+from .utils import torch_logsumexp,torch_transpose,torch_tile
 
 def numpy_norm_naive_bayes_predict(X,mu,sd,logPC):
     # X: sample_size * features

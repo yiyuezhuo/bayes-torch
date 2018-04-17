@@ -5,8 +5,8 @@ Created on Thu Apr 12 13:47:11 2018
 @author: yiyuezhuo
 """
 
-from core import Parameter,Data,optimizing,vb,sampling
-from distributions import norm_log_prob
+from bayestorch.core import Parameter,Data,optimizing,vb,sampling
+from bayestorch.distributions import norm_log_prob
 
 import numpy as np
 
@@ -27,6 +27,8 @@ optimizing(target)
 print('optimizing: mu={}'.format(mu.data.numpy()))
 res = vb(target)
 print('vb: mu={} omega={} sigma={}'.format(res[0],res[1],np.exp(res[1])))
+trace = sampling(target)
+print('sampling: mu={} sigma={}'.format(np.mean(trace), np.std(trace)))
 
 # stan model
 

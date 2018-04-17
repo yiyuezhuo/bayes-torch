@@ -8,18 +8,24 @@ Created on Thu Apr 12 08:26:47 2018
 import torch
 from torch.autograd import Variable
 import numpy as np
-import scipy
+#import scipy
 
 '''
-core主要封装参数定义之类的东西，把它们记录到当前model里。不然动态图定义一时爽，
-更新起来火葬场。
 
-程序主体应该是这样，我们在顶层用helper function Paramter声明一些参数，
-这些参数同时被记录到匿名的module.current_model的参数列表里。
-然后这些参数的计算过程写到一个target函数里，这个函数应该返回一个target Variable
-这个表示计算概率函数和生成动态图的过程，
-最后我们调用module.api去隐式调用model的方法进行相关操作。一般蕴含着不断重建
-动态图的过程。
+
+Core mainly wrap the parameter defining process, those parameter will
+be recorded into "current" model automatically. Otherwise, you can
+define a dynamic as intuititive way and feels awkward when you try to manage
+your parameter spreading everywhere and write a update function.
+
+Our program should be consist of
+1. Define some parameter using helper function defined in this module, then
+   those paramters will be appended into a list of anonymous model object.
+2. The computation process relate those parameter should be written into a so
+   called "target" function(stan style without fake sampling statement).
+   The function may return a target torch Variable.
+3. Finally, we call module.optimzing/vb/sampiling to run our inference.
+   Every calling will build a new dynamic graph.
 '''
 
 
@@ -40,7 +46,7 @@ class Model:
         self.set_parameter(param_samples)
         return param_samples_eta
     def set_parameter(self, values, is_float = True):
-        # values is a flatten array
+        # values is a flatten numpy array
         start = 0
         for param in self.parameters:
             param_size = np.prod(param.size())
@@ -73,7 +79,7 @@ class Model:
         omega_grad = np.zeros(n_parameters)
         
         optimizer = torch.optim.SGD(self.parameters, lr=lr)
-        # optimizer只用于清空梯度，不用它来更新
+        # optimizer only serve to zero_grad.
         
         for i in range(q_size):
             
@@ -123,8 +129,49 @@ class Model:
         if method == 'fullrank':
             return self.vb_fullrank(target_f, **kwargs)
         raise NotImplementedError
-    def sampling(self):
-        trace = []
+    def sampling_hmc(self, target_f, epsilon=0.01, L=20, M=100):
+        
+        def grad(theta):
+            self.set_parameter(theta)
+            return self.grad(target_f)
+        def likelihood(theta):
+            self.set_parameter(theta)
+            return target_f().data.numpy()
+        
+        sample =[]
+        sample.append(self.collect_parameter())
+        accept_list = []
+        
+        for m in range(M):
+            r0 = np.random.normal(size=self.n_parameters)
+            r = r0
+            theta0 = sample[-1]
+            theta = theta0.copy()
+            
+            for i in range(L):
+                r = r + 0.5 * epsilon * grad(theta)
+                theta = theta + epsilon * r
+                self.set_parameter(theta)
+                r = r + 0.5 * epsilon * grad(theta)
+            odd_up = np.exp(likelihood(theta)-0.5*np.dot(r,r))
+            odd_bottom = np.exp(likelihood(theta0)-0.5*np.dot(r0,r0))
+            alpha = min(1,odd_up/odd_bottom)
+            accept_list.append(alpha)
+            
+            if np.random.random() < alpha:
+                sample.append(theta)
+            else:
+                sample.append(theta0)
+        return sample
+        
+
+    def sampling(self, target_f, method= 'hmc', **kwargs):
+        #trace = []
+        #raise NotImplementedError
+        if method == 'hmc':
+            return self.sampling_hmc(target_f, **kwargs)
+        if method == 'nuts':
+            return self.sampling_nuts(target_f, **kwargs)
         raise NotImplementedError
     def optimizing(self, target_f, lr=0.01, n_epoch = 1000):
         '''
@@ -148,7 +195,7 @@ class Model:
         return self.collect_parameter_grad()
             
 def easy_variable(data, is_float=True, requires_grad=False):
-    if not hasattr(data, '__len__'):# is scaler without
+    if not hasattr(data, '__len__'):# is scaler
         data = [data]
     if not isinstance(data, torch.Tensor):
         array = torch.from_numpy(np.array(data)) # np.array copyed data

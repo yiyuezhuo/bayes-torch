@@ -5,8 +5,8 @@ Created on Thu Apr 12 08:24:28 2018
 @author: yiyuezhuo
 """
 
-from core import Parameter,Data,optimizing,vb,sampling
-from distributions import norm_log_prob
+from bayestorch.core import Parameter,Data,optimizing,vb,sampling
+from bayestorch.distributions import norm_log_prob
 
 import numpy as np
 
@@ -30,3 +30,5 @@ print('optimizing: mu={}'.format(mu.data.numpy()))
 res = vb(target)
 print('vb: mu={} omega={} sigma={}'.format(res[0],res[1],np.exp(res[1])))
 #vb: mu=[0.66530417] omega=[-1.05874966] sigma=[0.34688927]
+trace = sampling(target)
+print('sampling: mu={} sigma={}'.format(np.mean(trace), np.std(trace)))

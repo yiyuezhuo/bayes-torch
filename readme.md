@@ -41,8 +41,8 @@ def target():
 Full code comparing two framework:
 
 ```
-from core import Parameter,Data,optimizing,vb,sampling
-from distributions import norm_log_prob
+from bayestorch.core import Parameter,Data,optimizing,vb,sampling
+from bayestorch.distributions import norm_log_prob
 
 import numpy as np
 
@@ -63,6 +63,8 @@ optimizing(target)
 print('optimizing: mu={}'.format(mu.data.numpy()))
 res = vb(target)
 print('vb: mu={} omega={} sigma={}'.format(res[0],res[1],np.exp(res[1])))
+trace = sampling(target)
+print('sampling: mu={} sigma={}'.format(np.mean(trace), np.std(trace)))
 
 # stan model
 
@@ -85,6 +87,7 @@ print('optimizing(stan): mu={}'.format(res2['mu']))
 res3 = sm.vb(data = dict(N = len(_X), y = _X))
 res3a=np.array(res3['sampler_params'])
 print('vb(stan): mu={} sigma={}'.format(res3a[:,0].mean(),res3a[:,0].std()))
+
 
 ```
 

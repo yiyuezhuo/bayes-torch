@@ -5,16 +5,16 @@ Created on Thu Apr 12 19:56:38 2018
 @author: yiyuezhuo
 """
 
-from core import Parameter,Data,Variable,optimizing,vb,sampling
-from distributions import norm_log_prob
-from classifier import norm_naive_bayes_predict
-from utils import GridSampler2d,cdist,soft_cut_ge,soft_cut_le
+from bayestorch.core import Parameter,Data,Variable,optimizing,vb,sampling
+from bayestorch.distributions import norm_log_prob
+from bayestorch.classifier import norm_naive_bayes_predict
+from bayestorch.utils import GridSampler2d,cdist,soft_cut_ge,soft_cut_le
 
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-import core
+import bayestorch.core as core
 model = core.current_model
 
 # data
@@ -85,9 +85,8 @@ def target2():
     #target2 = target1 + torch.sum(enemy.sum(dim=1))
     return target2
 
-optimizing(target)
 
-# display the optimizing result
+# display the optimizing result helper function
 
 def show_change(show=True):
     display_data()
@@ -101,7 +100,32 @@ def show_change(show=True):
 def reset():
     enemy.data = torch.from_numpy(enemy_point).float()
     
-def show_vb(vb_res,**kwargs):
+def show_ellipse(mu,sd):
+    from matplotlib.patches import Ellipse
+    
+    ax = plt.subplot(111)
+    show_change(show=False)
+    #res_reshaped = [r.reshape(enemy_point.shape) for r in res]
+    for i in range(enemy_point.shape[0]):
+        mu_x,mu_y = mu[i]
+        sd_x,sd_y = sd[i]
+        e=Ellipse((mu_x,mu_y), sd_x, sd_y, 0)
+        e.set_clip_box(ax.bbox)
+        e.set_alpha(0.1)
+        ax.add_artist(e)
+        
+    plt.show()
+    
+def show_vb(vb_res):
+    res = vb_res
+    model.set_parameter(res[0])
+    res_reshaped = [r.reshape(enemy_point.shape) for r in res]
+    mu = res_reshaped[0]
+    sd = np.exp(res_reshaped[1])
+    show_ellipse(mu,sd)
+
+    
+def _show_vb(vb_res):
     from matplotlib.patches import Ellipse
     
     #res = vb(target,**kwargs)
@@ -120,8 +144,36 @@ def show_vb(vb_res,**kwargs):
         ax.add_artist(e)
     
     plt.show()
-
     
+def show_sampling(trace):
+    trace = np.array(trace).reshape((len(trace),)+enemy_point.shape)
+    mu = trace.mean(axis=0)
+    sd = trace.std(axis=0)
+    model.set_parameter(mu.ravel())
+    show_ellipse(mu,sd)
 
+# experiment
+reset()
+optimizing(target)
+show_change(target)
+
+reset()
+optimizing(target2)
+show_change(target)
+    
+reset()
 res = vb(target)
 show_vb(res)
+
+reset()
+res = vb(target2)
+show_vb(res)
+
+
+reset()
+trace = sampling(target)
+show_sampling(trace)
+
+reset()
+trace = sampling(target2)
+show_sampling(trace)
