@@ -29,9 +29,14 @@ Our program should be consist of
 '''
 
 
+    
 
 class Model:
     def __init__(self):
+        self.parameters = []
+        self.n_parameters = 0
+        self.size_parameters = []
+    def reset(self):
         self.parameters = []
         self.n_parameters = 0
         self.size_parameters = []
@@ -72,6 +77,15 @@ class Model:
             res[start:start+param_size] = param.data.numpy().copy().ravel()
             start += param_size
         return res
+    def get_index(self):
+        rd = {}
+        start = 0
+        for param in self.parameters:
+            param_size = np.prod(param.size())
+            #res[start:start+param_size] = param.data.numpy().copy().ravel()
+            rd[param] = np.arange(start, start+param_size)
+            start += param_size
+        return rd
     def grad_q_meanfield(self, target_f, mu, omega, q_size=10, lr = 0.01):
         n_parameters = self.n_parameters
         
@@ -100,7 +114,8 @@ class Model:
         
         return mu_grad,omega_grad
             
-    def vb_meanfield(self, target_f, mu=None,omega=None, zero_init=False, n_epoch = 100, lr=0.01, q_size = 10):
+    def vb_meanfield(self, target_f, mu=None,omega=None, zero_init=False, 
+                     n_epoch = 100, lr=0.01, q_size = 10):
         n_parameters = self.n_parameters
         
         if mu is None:
@@ -123,9 +138,38 @@ class Model:
         
     def vb_fullrank(self, target_f):
         raise NotImplementedError
-    def vb(self, target_f, method = 'meanfield', **kwargs):
+    def vb_meanfield_format(self, res):
+        # res = (mu, omega) -> {Parameter1: {'mu': mu1, 'sigma': exp(omega1)}...}
+        mu, omega = res
+        
+        return_dict = {}
+        start = 0
+        for param in self.parameters:
+            param_size = np.prod(param.size())
+            _mu = mu[start:start+param_size].reshape(param.size())
+            _omega = omega[start:start+param_size].reshape(param.size())
+            return_dict[param] = {'mu':_mu,'omega':_omega}
+            start += param_size
+        return return_dict
+    
+    def vb(self, target_f, method = 'meanfield', format=False, 
+                 reload=False, **kwargs):
         if method == 'meanfield':
-            return self.vb_meanfield(target_f, **kwargs)
+            res = self.vb_meanfield(target_f, **kwargs)
+            if not format:
+                return res
+            self.set_parameter(res[0])
+            grad = self.grad(target_f) #当时的grad将被用来诊断是否收敛
+            grad_size = np.sum(grad**2)
+            converge = grad_size < 0.01
+            report = dict( method = 'meanfiled', 
+                           est = self.vb_meanfield_format(res),
+                           grad = grad,
+                           grad_size = grad_size,
+                           converge = converge)
+            if reload:
+                self.set_parameter(res[0])
+            return report
         if method == 'fullrank':
             return self.vb_fullrank(target_f, **kwargs)
         raise NotImplementedError
@@ -164,7 +208,6 @@ class Model:
                 sample.append(theta0)
         return sample
         
-
     def sampling(self, target_f, method= 'hmc', **kwargs):
         #trace = []
         #raise NotImplementedError
@@ -173,6 +216,7 @@ class Model:
         if method == 'nuts':
             return self.sampling_nuts(target_f, **kwargs)
         raise NotImplementedError
+        
     def optimizing(self, target_f, lr=0.01, n_epoch = 1000):
         '''
         After optimizing run, the result is stored in original torch variable.
@@ -193,42 +237,105 @@ class Model:
         target = target_f()
         target.backward()
         return self.collect_parameter_grad()
-            
-def easy_variable(data, is_float=True, requires_grad=False):
+
+# helper function 
+
+
+
+def easy_variable(data, is_discrete=False, requires_grad=False):
     if not hasattr(data, '__len__'):# is scaler
         data = [data]
     if not isinstance(data, torch.Tensor):
-        array = torch.from_numpy(np.array(data)) # np.array copyed data
-        if is_float:
-            array = array.float()
-    return Variable(array, requires_grad=requires_grad)
+        data = torch.from_numpy(np.array(data)) # np.array copyed data
+        if is_discrete:
+            data = data.long()
+        else:
+            data = data.float()
+    return Variable(data, requires_grad=requires_grad)
+
+# global model api
     
-def Parameter(data, is_float=True, model = None):
+current_model = Model()
+#defining = True
+_state = {'defining':True}
+index = {}
+
+class ModelDefiningEnd(Exception):
+    '''The exception is proposed to avoid unintention error.
+    After calling fit method, you can't redefine the model
+    unless you reset it.'''
+    pass
+
+
+def require_defining(func):
+    def _func(*args,**kwargs):
+        if _state['defining'] ==False:
+            raise ModelDefiningEnd("The model seems have been defined, please reset before any new defintion operation.")
+        return func(*args,**kwargs)
+    return func
+
+@require_defining
+def Parameter(data, is_discrete=False, model = None):
     variable = easy_variable(data, 
-                             is_float = is_float,
+                             is_discrete = is_discrete,
                              requires_grad = True)
     if model is None:
         model = current_model
     model.add_parameter(variable)
     return variable
 
-def Data(data, is_float=True, model = None):
+@require_defining
+def Data(data, is_discrete=False, model = None):
     variable = easy_variable(data, 
-                             is_float = is_float,
+                             is_discrete = is_discrete,
                              requires_grad = False)
     return variable
 
-'''
+
+
+def end_defining(func):
+    def _func(*args,**kwargs):
+        if _state['defining']:
+            _state['defining'] = False
+            index.update(get_index())
+        return func(*args,**kwargs)
+    return _func
+
+def start_defining(func):
+    def _func(*args, **kwargs):
+        _state['defining'] = True
+        index.clear()
+        return func(*args, **kwargs)
+    return _func
+
+
+
+@end_defining
 def optimizing(*args, **kwargs):
     return current_model.optimizing(*args, **kwargs)
 
+@end_defining
 def vb(*args, **kwargs):
     return current_model.vb(*args, **kwargs)
 
+@end_defining
 def sampling(*args, **kwargs):
     return current_model.vb(*args, **kwargs)
+
+@end_defining
+def get_index(*args, **kwargs):
+    return current_model.get_index(*args, **kwargs)
+
+@start_defining
+def reset():
+    current_model.reset()
+    
+
+
 '''
 current_model = Model()
 optimizing = current_model.optimizing
 vb = current_model.vb
 sampling = current_model.sampling
+'''
+

@@ -58,6 +58,9 @@ enemy = Parameter(enemy_point) # set real value as init value, though maybe a ra
 conflict_threshold = 0.2
 distance_threshold = 1.0
 tense = 10.0
+alpha = 5.0
+prior_threshold = 5.0
+prior_tense = 5.0
 
 def target():
     friend_enemy = torch.cat((friend, enemy),0)
@@ -81,8 +84,7 @@ def target():
 def target2():
     target1 = target()
     # location prior
-    target2 = target1 + 5.0*torch.sum(soft_cut_ge(enemy.sum(dim=1),5.0,tense=5))
-    #target2 = target1 + torch.sum(enemy.sum(dim=1))
+    target2 = target1 + torch.sum(enemy.sum(dim=1))
     return target2
 
 

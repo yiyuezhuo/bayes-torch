@@ -1,4 +1,5 @@
-# A bayes inference library based on pytorch
+
+# Bayes-torch: A light weight bayes inference framework
 
 Though there're a lot of bayes inference modeling lib/language
 such as stan,edward(tensorflow) and pymc(theano), the relation between
