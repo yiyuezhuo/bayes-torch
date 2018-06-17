@@ -159,7 +159,7 @@ class Model:
             if not format:
                 return res
             self.set_parameter(res[0])
-            grad = self.grad(target_f) #当时的grad将被用来诊断是否收敛
+            grad = self.grad(target_f) # present grad will be used to determine if converge
             grad_size = np.sum(grad**2)
             converge = grad_size < 0.01
             report = dict( method = 'meanfiled', 

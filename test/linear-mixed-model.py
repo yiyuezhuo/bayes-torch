@@ -122,7 +122,8 @@ def explain_fit(fit):
 print('--------advi(epoch=100)----------')
 explain_fit(fit) # The sigma seems lack of converge
 print('--------advi(epoch=1000)----------')
-explain_fit(fit2)
+explain_fit(fit2) 
+# The result very close to statsmodels and lme4(Well the both of two are not close anyway)
 '''
 print('--------advi(epoch=10000)----------')
 explain_fit(fit3)
