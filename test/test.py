@@ -10,7 +10,8 @@ from bayestorch.distributions import norm_log_prob
 
 import numpy as np
 
-_X = np.random.random(10)
+#_X = np.random.random(10)
+_X = np.arange(10)
 print(_X.mean())
 #0.6720278728059971
 
@@ -29,6 +30,9 @@ print('optimizing: mu={}'.format(mu.data.numpy()))
 # optimizing: mu=[0.68792978] omega=[-1.09238617] sigma=[0.33541518]
 res = vb(target)
 print('vb: mu={} omega={} sigma={}'.format(res[0],res[1],np.exp(res[1])))
+res = vb(target,n_epoch=2000)
+print('vb: mu={} omega={} sigma={}'.format(res[0],res[1],np.exp(res[1])))
+
 #vb: mu=[0.66530417] omega=[-1.05874966] sigma=[0.34688927]
 trace = sampling(target)
 print('sampling: mu={} sigma={}'.format(np.mean(trace), np.std(trace)))

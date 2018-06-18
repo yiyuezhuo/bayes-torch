@@ -42,6 +42,7 @@ def collect_parameters(target_f):
             parameters_dict[key] = value
     return parameters_dict
 
+
 class NormalReparametrization:
     def __init__(self,loc,omega):
         self.loc = loc
@@ -76,15 +77,18 @@ class VariationalMeanFieldDistribution:
         for name,param in self.params.items():
             q_dis = torch.distributions.Normal(param['loc'],torch.exp(param['omega']))
             logq += q_dis.log_prob(self.target_f.__globals__[name])
+            #s_dis = torch.distributions.Normal(0.,1.)
+            #z = (self.target_f.__globals__[name] - param['loc'])/torch.exp(param['omega'])
+            #logq += s_dis.log_prob(z)
         return logq
             
 
 
 @contextlib.contextmanager
-def transform_meanfield(target_f):
+def transform_meanfield(target_f, q_size = 1):
     '''
     Providing a function that replace all variables labeled Parameter 
-    in target_f.__global__ with sample of variational distribution.
+    in target_f.__globals__ with sample of variational distribution.
     
     When exit, the state will be reset and variational parameter 
     loc value will not be rewrite to original value. The variational parameter,
@@ -93,29 +97,91 @@ def transform_meanfield(target_f):
     '''
     cache = collect_parameters(target_f)
     
-    q_dis = VariationalMeanFieldDistribution(target_f)
+    q_dis = VariationalMeanFieldDistribution(target_f, q_size = q_size)
     
     yield q_dis
     
     target_f.__globals__.update(cache)
     
-def vb_meanfield(target_f, n_epoch = 100, lr=0.01, q_size = 10):
+def vb_meanfield(target_f, n_epoch = 100, lr=0.01, q_size = 1):
     
-    with transform_meanfield(target_f) as q_dis: 
+    with transform_meanfield(target_f, q_size = q_size) as q_dis: 
     
         optimizer = torch.optim.SGD(q_dis.parameters(), lr=lr)
         for i in range(n_epoch):
             q_dis.sample()
             logp = target_f()
             logq = q_dis.log_prob()
-            target = logp.sum(-1) + logq.sum(-1)
+            target = logp.mean(0) - logq.mean(0) # reduce q_size dimention
             loss = -target
             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         
-    return q_dis
+    return q_dis # Though calling sample or other method may cause misleading.
+                 # Maybe returning only trimed params is better choice?
+                 
+def vb_fullrank(target_f, n_epoch = 100, lr=0.01, q_size = 1):
+    raise NotImplementedError
+    
+def sampling_hmc(target_f, leap_frog_step = 0.01, leap_frog_length = 20, 
+                 trace_length = 100):
+    pd = collect_parameters(target_f)
+    trace = []
+    potential_trace = []
+    
+    def grad():
+        # zero_grad manually
+        for name in pd:
+            target_f.__globals__[name].grad = None
+        target = target_f()
+        target.backward()
+        return target
+    
+    def get_potential(target, r):
+        #target = target_f()
+        potential = target.detach()
+        for name in pd:
+            #potential -= r[name] @ r[name]
+            potential -= 0.5 * torch.sum(r[name] * r[name]) 
+            # It's interesting to see torch.dot or @ does't support size 0 tensor
+        return potential
+    
+
+    
+    for trace_i in range(trace_length):
+        r = {}
+        for name in pd:
+            r[name]  = torch.randn_like(target_f.__globals__[name])
+            
+        trace.append({name: target_f.__globals__[name].detach() for name in pd})
+        potential_trace.append(get_potential(target_f(), r))
+
+        # leap-frog procedure
+        for frog_i in range(leap_frog_length):
+            grad()
+            for name in pd:
+                r[name] += (leap_frog_step/2) * target_f.__globals__[name].grad
+                theta = target_f.__globals__[name].detach() + leap_frog_step * r[name]
+                #print(r[name],theta)
+                target_f.__globals__[name] = Parameter(theta)
+            target = grad()
+            for name in pd:
+                r[name] += (leap_frog_step/2) * target_f.__globals__[name].grad
+        
+        potential = get_potential(target, r)
+        log_accept = potential - potential_trace[-1]
+        #print(log_accept,potential,potential_trace[-1])
+        #print(log_accept)
+        if log_accept > 0 or (torch.rand(1) < torch.exp(log_accept)).item():
+            #print('accept',)
+            trace[-1] = {name: target_f.__globals__[name].detach() for name in pd}
+            potential_trace[-1] = potential
+        
+    return trace
+                
+                
 
 
 
@@ -137,7 +203,7 @@ def vb(target_f,method='meanfield', *args, **kwargs):
 
 @cache_target_f
 def sampling(target_f,method='hmc',*args,**kwargs):
-    raise NotImplemented
+    return globals()[f'sampling_{method}'](target_f,*args,**kwargs)
     
 @cache_target_f
 def optimizing(target_f, lr=0.01, n_epoch = 1000):

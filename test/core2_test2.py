@@ -31,38 +31,46 @@ res = vb(target)
 q_mu = res.params['mu']
 print(f'vb mu={q_mu["loc"]} omega={q_mu["omega"]} sigma={torch.exp(q_mu["omega"])}')
 
-trace = sampling(target)
-mu_trace = torch.tensor([t['mu'].item() for t in trace])
-print('sampling: mu={} sigma={}'.format(torch.mean(mu_trace), torch.std(mu_trace)))
-
-
 reset()
 
 mu = Parameter(0.0)
 
-res = vb(target, q_size = 10)
+res = vb(target, q_size = 10, n_epoch=200)
 q_mu = res.params['mu']
 print(f'vb mu={q_mu["loc"]} omega={q_mu["omega"]} sigma={torch.exp(q_mu["omega"])}')
-
-reset()
-
-mu = Parameter(0.0)
-
-res = vb(target, n_epoch = 2000)
-q_mu = res.params['mu']
-print(f'vb mu={q_mu["loc"]} omega={q_mu["omega"]} sigma={torch.exp(q_mu["omega"])}')
-
-reset()
-
-mu = Parameter(0.0)
-
-
-trace = sampling(target)
-mu_trace = torch.tensor([t['mu'].item() for t in trace])
-print('sampling: mu={} sigma={}'.format(torch.mean(mu_trace), torch.std(mu_trace)))
-
-mu = Parameter(4.5)
 
 trace = sampling(target,trace_length=300)
 mu_trace = torch.tensor([t['mu'].item() for t in trace])
 print('sampling: mu={} sigma={}'.format(torch.mean(mu_trace), torch.std(mu_trace)))
+
+
+# stan model
+
+
+import numpy as np
+import pystan
+stan_code = '''
+data {
+    int<lower=1> N;
+    real y[N];
+}
+parameters {
+    real mu;
+}
+model {
+    y ~ normal(mu, 1);
+}
+'''
+sm = pystan.StanModel(model_code = stan_code)
+
+_X = _X.numpy()
+res2 = sm.optimizing(data = dict(N = len(_X), y = _X))
+print(f'optimizing(stan): mu={res2["mu"]}')
+res3 = sm.vb(data = dict(N = len(_X), y = _X))
+res3a=np.array(res3['sampler_params'])
+print(f'vb(stan): mu={res3a[0,:].mean()} sigma={res3a[0,:].std()}')
+'''
+res4 = sm.sampling(data = dict(N = len(_X), y = _X))
+res4a=res4.extract()['mu']
+print(f'vb(stan): mu={res4a.mean()} sigma={res4a.std()}')
+'''

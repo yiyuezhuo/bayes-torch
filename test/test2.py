@@ -10,7 +10,8 @@ from bayestorch.distributions import norm_log_prob
 
 import numpy as np
 
-_X = np.random.random(10)
+#_X = np.random.random(10)
+_X = np.arange(10)
 print(_X.mean(),_X.std())
 
 # torch-bayes model
@@ -50,5 +51,8 @@ res2 = sm.optimizing(data = dict(N = len(_X), y = _X))
 print('optimizing(stan): mu={}'.format(res2['mu']))
 res3 = sm.vb(data = dict(N = len(_X), y = _X))
 res3a=np.array(res3['sampler_params'])
-print('vb(stan): mu={} sigma={}'.format(res3a[:,0].mean(),res3a[:,0].std()))
+print('vb(stan): mu={} sigma={}'.format(res3a[0,:].mean(),res3a[0,:].std()))
 
+res4 = sm.sampling(data = dict(N = len(_X), y = _X))
+res4a=res4.extract()['mu']
+print(f'vb(stan): mu={res4a.mean()} sigma={res4a.std()}')
