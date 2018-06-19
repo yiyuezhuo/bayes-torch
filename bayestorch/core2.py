@@ -35,12 +35,19 @@ class Data(torch.Tensor):
         tensor.__class__ = cls
         return tensor
     
-def collect_parameters(target_f):
+def collect_variable_labeled_class(target_f,classes):
     parameters_dict = {}
     for key,value in target_f.__globals__.items():
-        if isinstance(value, Parameter):
+        if isinstance(value, classes):
             parameters_dict[key] = value
     return parameters_dict
+
+    
+def collect_parameters(target_f):
+    return collect_variable_labeled_class(target_f, Parameter)
+
+def collect_parameter_datas(target_f):
+    return collect_variable_labeled_class(target_f, (Parameter,Data))
 
 
 class NormalReparametrization:
@@ -76,7 +83,10 @@ class VariationalMeanFieldDistribution:
         logq = 0.0
         for name,param in self.params.items():
             q_dis = torch.distributions.Normal(param['loc'],torch.exp(param['omega']))
-            logq += q_dis.log_prob(self.target_f.__globals__[name])
+            q_log_prob = q_dis.log_prob(self.target_f.__globals__[name])
+            for i in range(len(self.params[name]['size'])-1):
+                q_log_prob = q_log_prob.sum(-1)
+            logq += q_log_prob
             #s_dis = torch.distributions.Normal(0.,1.)
             #z = (self.target_f.__globals__[name] - param['loc'])/torch.exp(param['omega'])
             #logq += s_dis.log_prob(z)
@@ -87,15 +97,20 @@ class VariationalMeanFieldDistribution:
 @contextlib.contextmanager
 def transform_meanfield(target_f, q_size = 1):
     '''
-    Providing a function that replace all variables labeled Parameter 
+    Add q size dimention to all variables labeled Parameter and Data
     in target_f.__globals__ with sample of variational distribution.
     
     When exit, the state will be reset and variational parameter 
-    loc value will not be rewrite to original value. The variational parameter,
-    should be collected in block.
+    loc value rewrite to original value. The other variational parameters,
+    can be collected in block.
     
     '''
-    cache = collect_parameters(target_f)
+    cache = collect_parameter_datas(target_f)
+    
+    for name,variable in cache.items():
+        if isinstance(variable,Data):
+            extended = variable.unsqueeze(0).repeat(q_size,*(1,)*len(variable.shape))
+            target_f.__globals__[name] = extended
     
     q_dis = VariationalMeanFieldDistribution(target_f, q_size = q_size)
     

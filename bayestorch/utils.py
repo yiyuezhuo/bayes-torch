@@ -65,10 +65,61 @@ def torch_transpose(x):
     return x.transpose(0,1)
 
 
-def torch_cdis(A,B):
+def torch_cdist(A,B):
+    '''
+    A: m * n
+    B: t * n
+    ->
+    m * t
+    
+    or 
+    
+    A: q * m * n
+    B: q * t * n
+    ->
+    q * m * t
+    '''
     # scipy.spatial.distance.cdist(A, B).min(axis=1) # numpy version
-    d = A.repeat(1,B.size()[0]).resize(A.size()[0]*B.size()[0],2).resize(A.size()[0],B.size()[0],2) - B
-    return torch.sqrt((d**2).sum(dim=2)) 
+    '''
+    if len(A.shape) == len(B.shape):
+    #d = A.repeat(1,B.size()[0]).resize(A.size()[0]*B.size()[0],2).resize(A.size()[0],B.size()[0],2) - B
+        d = A.repeat(1,B.shape[0]).reshape(A.shape[0]*B.shape[0],2).reshape(A.shape[0],B.shape[0],2) - B
+    else:
+        _B = B.unsqueeze(2).repeat(1,1,A.shape[0],1)
+        d = A - _B
+    '''
+    length = len(A.shape) + 1
+    A_expand = [-1] * length 
+    A_expand[-2] = B.shape[-2]
+    B_expand = [-1] * length
+    B_expand[-3] = A.shape[-2]
+    d = A.unsqueeze(-2).expand(*A_expand) - B.unsqueeze(-3).expand(*B_expand)
+    return torch.sqrt((d**2).sum(dim=-1)) 
 
 
-cdist = torch_cdis
+cdist = torch_cdist
+
+def cat(seq,*args,dim=0,**kwargs):
+    '''
+    broadcast version of torch.cat
+    '''
+    min_len = max_len = len(seq[0].shape)
+    max_idx = 0
+    for i,t in enumerate(seq):
+        if len(t.shape) > max_len:
+            max_idx = i
+            max_len = len(t.shape)
+        elif len(t.shape) < min_len:
+            min_len = len(t.shape)
+    
+    if min_len == max_len:
+        return torch.cat(seq,*args,dim=dim,**kwargs)
+    
+    shape = seq[max_idx].shape
+    for i in range(len(seq)):
+        res = len(shape) - len(t.shape)
+        for j in range(res):
+            seq[i] = seq[i].unsqueeze(0)
+        seq[i] = seq[i].repeat(shape[:res] + (1,)*len(seq[i].shape))
+    
+    return torch.cat(seq,*args,dim=dim,**kwargs)

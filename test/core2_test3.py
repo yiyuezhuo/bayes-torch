@@ -6,17 +6,14 @@ Created on Thu Apr 12 19:56:38 2018
 """
 
 from bayestorch.core2 import Parameter,Data,optimizing,vb,sampling
-#from bayestorch.distributions import norm_log_prob
 from bayestorch.classifier import norm_naive_bayes_predict
-from bayestorch.utils import GridSampler2d,cdist,soft_cut_ge,soft_cut_le
+from bayestorch.utils import cdist,soft_cut_ge,soft_cut_le
 
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from torch import tensor
 
-#import bayestorch.core as core
-#model = core.current_model
 
 # data
 friend_point = tensor([[0.0,5],[0.9,3.5],[1.4,3.0],[1.8,2.5],[2.1,1.1],[2.5,0.9],[3.2,0.5]])
@@ -67,8 +64,9 @@ prior_threshold = 5.0
 prior_tense = 5.0
 
 def target():
-    friend_enemy = torch.cat((friend, enemy),0)
-    distance = cdist(battle, friend_enemy).min(dim=1)[0]
+    friend_enemy = torch.cat((friend, enemy),-2)
+    
+    distance = cdist(battle, friend_enemy).min(dim=-1)[0]
     logPC = Data(_logPC)
     
     '''
@@ -80,8 +78,8 @@ def target():
     sd[0,:] = friend.std(dim=-2)
     sd[1,:] = enemy.std(dim=-2)
     '''
-    mu = torch.stack([friend.mean(-2),enemy.mean(-2)])
-    sd = torch.stack([friend.std(-2),enemy.std(-2)])
+    mu = torch.stack([friend.mean(-2),enemy.mean(-2)],-2)
+    sd = torch.stack([friend.std(-2),enemy.std(-2)],-2)
     
     conflict = torch.exp(norm_naive_bayes_predict(battle, mu, sd, logPC)).prod(-1)
     p = soft_cut_ge(conflict,conflict_threshold, tense = tense) *  \
@@ -137,10 +135,15 @@ def show_ellipse(mu,sd):
     
 def show_vb(vb_res):
     res = vb_res
-    model.set_parameter(res[0])
-    res_reshaped = [r.reshape(enemy_point.shape) for r in res]
-    mu = res_reshaped[0]
-    sd = np.exp(res_reshaped[1])
+    #model.set_parameter(res[0])
+    #res_reshaped = [r.reshape(enemy_point.shape) for r in res]
+    loc = res.params['enemy']['loc']
+    omega = res.params['enemy']['omega']
+    #mu_x,mu_y = loc[:,0], loc[:,1]
+    #omega_x,omega_y = omega[:,0],omega[:,1]
+
+    mu = loc
+    sd = torch.exp(omega)
     show_ellipse(mu,sd)
 
     
@@ -149,14 +152,17 @@ def _show_vb(vb_res):
     
     #res = vb(target,**kwargs)
     res = vb_res
-    model.set_parameter(res[0])
+    #model.set_parameter(res[0])
     
     ax = plt.subplot(111)
     show_change(show=False)
-    res_reshaped = [r.reshape(enemy_point.shape) for r in res]
+    #res_reshaped = [r.reshape(enemy_point.shape) for r in res]
     for i in range(enemy_point.shape[0]):
-        mu_x,mu_y = res_reshaped[0][i]
-        omega_x,omega_y = res_reshaped[1][i]
+        #mu_x,mu_y = res_reshaped[0][i]
+        loc = res.params['enemy']['loc']
+        omega = res.params['enemy']['omega']
+        mu_x,mu_y = loc[:,0], loc[:,1]
+        omega_x,omega_y = omega[:,0],omega[:,1]
         e=Ellipse((mu_x,mu_y), np.exp(omega_x), np.exp(omega_y), 0)
         e.set_clip_box(ax.bbox)
         e.set_alpha(0.1)
@@ -165,10 +171,13 @@ def _show_vb(vb_res):
     plt.show()
     
 def show_sampling(trace):
-    trace = np.array(trace).reshape((len(trace),)+enemy_point.shape)
-    mu = trace.mean(axis=0)
-    sd = trace.std(axis=0)
-    model.set_parameter(mu.ravel())
+    #trace = np.array(trace).reshape((len(trace),)+enemy_point.shape)
+    _trace = torch.stack([t['enemy'] for t in trace])
+    mu = _trace.mean(0)
+    sd = _trace.std(0)
+    #model.set_parameter(mu.ravel())
+    global enemy
+    enemy = Parameter(mu)
     show_ellipse(mu,sd)
 
 # experiment
@@ -183,10 +192,10 @@ show_change(target)
 
 
 reset()
-res = vb(target)
+res = vb(target,q_size=3)
 show_vb(res)
 
-'''
+
 reset()
 res = vb(target2)
 show_vb(res)
@@ -199,4 +208,3 @@ show_sampling(trace)
 reset()
 trace = sampling(target2)
 show_sampling(trace)
-'''

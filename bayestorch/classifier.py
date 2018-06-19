@@ -29,18 +29,31 @@ def numpy_norm_naive_bayes_predict(X,mu,sd,logPC):
     return log_predict_prob
 
 def torch_norm_naive_bayes_predict(X,mu,sd,logPC):
-    # X: sample_size * features
-    # mu: class_size * features or q_size * class_size * features
-    # sd: class_size * featrues or q_size * class_size * features
-    # log_PC class_size
+    # X: (q_size) * sample_size * features
+    # mu: (q_size) * class_size * features or q_size * class_size * features
+    # sd: (q_size) * class_size * featrues or q_size * class_size * features
+    # log_PC (q_size) * class_size
     # So called `q_size` is number of particles for some approxminate expectation. 
-    n_class = logPC.size()[0]
-    n_feature = X.size()[1]
-    n_sample = X.size()[0]
-    _X = torch_tile(X,[1,n_class]).resize(n_sample,n_class,n_feature)
+    n_class = logPC.shape[-1]
+    #n_feature = X.shape[-1]
+    #n_sample = X.shape[-2]
+    # q_size = X.shape[-3]
+    
+    X_expand = [-1] * (len(X.shape) + 1)
+    X_expand[-2] = n_class
+    _X = X.unsqueeze(-2).expand(X_expand)
+    #_X = torch_tile(X,[1,n_class]).reshape(n_sample,n_class,n_feature)
     #cp = torch_norm_log_prob(_X, mu, sd).sum(dim=2) + logPC
-    cp = Normal(mu,sd).log_prob(_X).sum(-1) + logPC
-    log_predict_prob = torch_transpose((torch_transpose(cp) - torch_logsumexp(cp,dim=1)))
+    
+    # X: (q_size) * sample_size * features
+    # _X: (q_size) * sample_size * n_class * features
+    # mu/sd: (q_size) * n_class * features
+    # _mu/_sd (q_size) * sample_size * n_class * feature
+    _mu = mu.unsqueeze(-3).expand_as(_X)
+    _sd = sd.unsqueeze(-3).expand_as(_X)
+    cp = Normal(_mu, _sd).log_prob(_X).sum(-1) + logPC
+    # cp: (q_size) * sample_size * n_class
+    log_predict_prob = (cp - torch_logsumexp(cp,dim=-1).unsqueeze(-1).expand_as(cp))
     return log_predict_prob
 
 norm_naive_bayes_predict = torch_norm_naive_bayes_predict
