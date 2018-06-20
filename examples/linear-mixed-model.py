@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 from torch import tensor
 
-from bayestorch.core3 import Parameter,Data,optimizing,vb,sampling,reset
+from bayestorch import Parameter,Data,optimizing,vb,sampling,reset
 from torch.distributions import Normal
 
 alphabet_to_int = {a:i for i,a in enumerate('ABCDEF')}

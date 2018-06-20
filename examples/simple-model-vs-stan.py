@@ -5,14 +5,12 @@ Created on Sun Jun 17 21:37:17 2018
 @author: yiyuezhuo
 """
 
-from bayestorch.core3 import Parameter,Data,optimizing,vb,sampling,reset
+from bayestorch import Parameter,Data,optimizing,vb,sampling,reset
 import torch
 from torch.distributions import Normal
 
-#_X = torch.rand(10)
 _X = torch.arange(10)
 print(_X.mean())
-#0.6720278728059971
 
 # torch-bayes model
 
@@ -69,8 +67,3 @@ print(f'optimizing(stan): mu={res2["mu"]}')
 res3 = sm.vb(data = dict(N = len(_X), y = _X))
 res3a=np.array(res3['sampler_params'])
 print(f'vb(stan): mu={res3a[0,:].mean()} sigma={res3a[0,:].std()}')
-'''
-res4 = sm.sampling(data = dict(N = len(_X), y = _X))
-res4a=res4.extract()['mu']
-print(f'vb(stan): mu={res4a.mean()} sigma={res4a.std()}')
-'''

@@ -24,11 +24,9 @@ Greeting our great elder toad!
 Source: http://chris.com/ascii/index.php?art=animals/frogs
 '''
 
-from .core import Parameter,Data,Variable
+from .core import Parameter,Data
 from .core import optimizing,vb,sampling
-from .core import reset,index
+from .core import reset
 import bayestorch.core as core
-import bayestorch.distributions as distributions
-import bayestorch.classifier as classifier
 import bayestorch.utils as utils
 
