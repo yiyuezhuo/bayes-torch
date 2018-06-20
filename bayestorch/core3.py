@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jun 14 20:58:07 2018
+Created on Thu Jun 19 19:29:07 2018
 
 @author: yiyuezhuo
 """
@@ -10,6 +10,8 @@ A relative gerneralized framework will be employed, such as apply common
 distributions rather than meanfield or full-rank multivariate normal.
 
 Pytorch 0.4 new features are required.
+
+core3 move q_size from first dimention to last dimention to leverage broadcasting.
 '''
 
 import torch
@@ -49,7 +51,6 @@ def collect_parameters(target_f):
 def collect_parameter_datas(target_f):
     return collect_variable_labeled_class(target_f, (Parameter,Data))
 
-
     
 class VariationalMeanFieldDistribution:
     def __init__(self,target_f, q_size=1):
@@ -60,13 +61,15 @@ class VariationalMeanFieldDistribution:
         for name,variable in collect_parameters(target_f).items():
             param = dict(loc = variable,
                          omega = torch.zeros(variable.shape, requires_grad=True),
-                         size = torch.Size([q_size]) + variable.shape)
+                         size = variable.shape + torch.Size([q_size]))
             self.params[name] = param
     def sample(self):
         for name,param in self.params.items():
             loc,scale,size = param['loc'],torch.exp(param['omega']),param['size']
             noise = torch.distributions.Normal(0,1).sample(size)
-            self.target_f.__globals__[name] = noise * scale + loc
+            _loc = loc.unsqueeze(-1).expand_as(noise)
+            _scale = scale.unsqueeze(-1).expand_as(noise)
+            self.target_f.__globals__[name] = noise * _scale + _loc
     def parameters(self):
         rl = []
         for name,param in self.params.items():
@@ -75,14 +78,14 @@ class VariationalMeanFieldDistribution:
     def log_prob(self):
         logq = 0.0
         for name,param in self.params.items():
-            q_dis = torch.distributions.Normal(param['loc'],torch.exp(param['omega']))
+            shape = param['loc'].shape + (self.q_size,)
+            _loc = param['loc'].unsqueeze(-1).expand(shape)
+            _omega = param['omega'].unsqueeze(-1).expand(shape)
+            q_dis = torch.distributions.Normal(_loc, torch.exp(_omega))
             q_log_prob = q_dis.log_prob(self.target_f.__globals__[name])
             for i in range(len(self.params[name]['size'])-1):
-                q_log_prob = q_log_prob.sum(-1)
+                q_log_prob = q_log_prob.sum(0)
             logq += q_log_prob
-            #s_dis = torch.distributions.Normal(0.,1.)
-            #z = (self.target_f.__globals__[name] - param['loc'])/torch.exp(param['omega'])
-            #logq += s_dis.log_prob(z)
         return logq
             
 
@@ -102,8 +105,8 @@ def transform_meanfield(target_f, q_size = 1):
     
     for name,variable in cache.items():
         if isinstance(variable,Data):
-            extended = variable.unsqueeze(0).repeat(q_size,*(1,)*len(variable.shape))
-            target_f.__globals__[name] = extended
+            extended = variable.unsqueeze(-1).expand(variable.shape + (q_size,))
+            target_f.__globals__[name] = Data(extended)
     
     q_dis = VariationalMeanFieldDistribution(target_f, q_size = q_size)
     
